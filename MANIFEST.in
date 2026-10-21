@@ -1,0 +1,3 @@
+include DATA_SOURCES.md
+include docs/screenshot.png
+recursive-include tests *.py

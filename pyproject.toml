@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools==84.2.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rainshine"
+dynamic = ["version"]
+description = "A simple desktop window onto recorded historical weather."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{name = "Commuted"}]
+dependencies = ["tzdata==2026.5; sys_platform == 'win32'"]
+
+[project.scripts]
+rainshine = "rainshine.__main__:main"
+
+[project.gui-scripts]
+rainshine-gui = "rainshine.__main__:main"
+
+[project.urls]
+Repository = "https://github.com/jeffreywevans/rainshine"
+
+[tool.setuptools.dynamic]
+version = {attr = "rainshine.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+rainshine = ["data/*.json"]
