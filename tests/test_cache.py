@@ -82,3 +82,37 @@ class CacheTests(unittest.TestCase):
         fixed = cache.fetch(URL, signature=b"STATION|")
         self.assertFalse(fixed.from_cache)
         self.assertTrue(fixed.path.read_bytes().startswith(b"STATION|"))
+
+    def test_incomplete_download_removes_temporary_file(self):
+        response = Response(b"STATION|DATE\n")
+        response.headers["Content-Length"] = "100"
+        cache = ArchiveCache(self.path, opener=lambda request, timeout: response)
+        with self.assertRaisesRegex(WeatherError, "incomplete"):
+            cache.fetch(URL, signature=b"STATION|")
+        self.assertEqual(list(self.path.iterdir()), [])
+
+    def test_streamed_size_limit_without_content_length_removes_temporary_file(self):
+        response = Response(b"STATION|too big")
+        response.headers.clear()
+        cache = ArchiveCache(self.path, opener=lambda request, timeout: response, max_bytes=8)
+        with self.assertRaisesRegex(WeatherError, "size or time limit"):
+            cache.fetch(URL, signature=b"STATION|")
+        self.assertEqual(list(self.path.iterdir()), [])
+
+    def test_cancellation_during_refresh_preserves_saved_file(self):
+        content = b"STATION|DATE\n"
+        cache = ArchiveCache(self.path, opener=lambda request, timeout: Response(content))
+        saved = cache.fetch(URL, signature=b"STATION|")
+        cancel = Event()
+
+        class CancellingResponse(Response):
+            def read(self, size=-1):
+                chunk = super().read(size)
+                cancel.set()
+                return chunk
+
+        cache.opener = lambda request, timeout: CancellingResponse(content)
+        with self.assertRaises(Cancelled):
+            cache.fetch(URL, signature=b"STATION|", max_age=-1, cancel=cancel)
+        self.assertEqual(saved.path.read_bytes(), content)
+        self.assertEqual(len(list(self.path.iterdir())), 2)

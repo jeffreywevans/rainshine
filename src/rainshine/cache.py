@@ -50,64 +50,15 @@ class ArchiveCache:
         parsed = urlsplit(url)
         if parsed.scheme != "https" or parsed.hostname != "www.ncei.noaa.gov" or parsed.username or parsed.password:
             raise WeatherError("Archive requests must use NOAA's HTTPS data service.")
-        if cancel and cancel.is_set():
-            raise Cancelled("Lookup cancelled.")
+        self._check_cancelled(cancel)
         self.directory.mkdir(parents=True, exist_ok=True)
         key = hashlib.sha256(url.encode()).hexdigest()
         target, metadata = self.directory / f"{key}.txt", self.directory / f"{key}.json"
-        old = None
+        old, fresh = self._load_cached(target, metadata, url, signature, max_age)
+        if fresh:
+            return old
         try:
-            info = json.loads(metadata.read_text(encoding="utf-8"))
-            valid = info.get("url") == url and target.is_file() and target.stat().st_size == info.get("size")
-            if valid:
-                with target.open("rb") as stream:
-                    valid = stream.read(len(signature)).startswith(signature)
-            if valid:
-                old = CachedFile(target, url, str(info["retrieved_at"]), True)
-                if time.time() - float(info["timestamp"]) < max_age:
-                    return old
-        except (OSError, ValueError, KeyError, TypeError):
-            pass
-
-        temporary = None
-        try:
-            request = urllib.request.Request(url, headers={"User-Agent": f"Rainshine/{__version__} (historical weather desktop app)", "Accept": "text/plain"})
-            with self.opener(request, timeout=20) as response:
-                length = response.headers.get("Content-Length")
-                if length and int(length) > self.max_bytes:
-                    raise WeatherError("This archive file exceeds Rainshine's download size limit.")
-                total = 0
-                started = time.monotonic()
-                with tempfile.NamedTemporaryFile(dir=self.directory, prefix="download-", delete=False) as stream:
-                    temporary = Path(stream.name)
-                    while True:
-                        if cancel and cancel.is_set():
-                            raise Cancelled("Lookup cancelled.")
-                        chunk = response.read(128 * 1024)
-                        if not chunk:
-                            break
-                        if total == 0 and not chunk.startswith(signature):
-                            raise WeatherError("NOAA returned an unexpected file format; no observations were accepted.")
-                        total += len(chunk)
-                        if total > self.max_bytes or time.monotonic() - started > 120:
-                            raise WeatherError("The archive download exceeded its size or time limit.")
-                        stream.write(chunk)
-                if not total:
-                    raise WeatherError("NOAA returned an empty archive file.")
-                if length and total != int(length):
-                    raise WeatherError("The archive download was incomplete. Please try again.")
-            if cancel and cancel.is_set():
-                raise Cancelled("Lookup cancelled.")
-            stamp = datetime.now(timezone.utc).isoformat()
-            info = {"url": url, "retrieved_at": stamp, "timestamp": time.time(), "size": total}
-            os.replace(temporary, target)
-            temporary = None
-            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=self.directory, prefix="metadata-", delete=False) as stream:
-                temporary = Path(stream.name)
-                json.dump(info, stream)
-            os.replace(temporary, metadata)
-            temporary = None
-            return CachedFile(target, url, stamp, False)
+            return self._download(url, target, metadata, signature, cancel)
         except Cancelled:
             raise
         except urllib.error.HTTPError as exc:
@@ -120,6 +71,75 @@ class ArchiveCache:
             if old:
                 return CachedFile(old.path, old.url, old.retrieved_at, True, True)
             raise WeatherError("Could not reach NOAA. Check the internet connection and try again.") from exc
+
+    @staticmethod
+    def _check_cancelled(cancel: Event | None) -> None:
+        if cancel and cancel.is_set():
+            raise Cancelled("Lookup cancelled.")
+
+    @staticmethod
+    def _load_cached(target: Path, metadata: Path, url: str, signature: bytes,
+                     max_age: int) -> tuple[CachedFile | None, bool]:
+        old = None
+        try:
+            info = json.loads(metadata.read_text(encoding="utf-8"))
+            valid = info.get("url") == url and target.is_file() and target.stat().st_size == info.get("size")
+            if valid:
+                with target.open("rb") as stream:
+                    valid = stream.read(len(signature)).startswith(signature)
+            if valid:
+                old = CachedFile(target, url, str(info["retrieved_at"]), True)
+                if time.time() - float(info["timestamp"]) < max_age:
+                    return old, True
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+
+        return old, False
+
+    def _download(self, url: str, target: Path, metadata: Path, signature: bytes,
+                  cancel: Event | None) -> CachedFile:
+        temporary = None
+        try:
+            request = urllib.request.Request(url, headers={"User-Agent": f"Rainshine/{__version__} (historical weather desktop app)", "Accept": "text/plain"})
+            with self.opener(request, timeout=20) as response:
+                length = response.headers.get("Content-Length")
+                if length and int(length) > self.max_bytes:
+                    raise WeatherError("This archive file exceeds Rainshine's download size limit.")
+                with tempfile.NamedTemporaryFile(dir=self.directory, prefix="download-", delete=False) as stream:
+                    temporary = Path(stream.name)
+                    total = self._write_response(response, stream, signature, cancel)
+            self._check_cancelled(cancel)
+            stamp = datetime.now(timezone.utc).isoformat()
+            info = {"url": url, "retrieved_at": stamp, "timestamp": time.time(), "size": total}
+            os.replace(temporary, target)
+            temporary = None
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=self.directory, prefix="metadata-", delete=False) as stream:
+                temporary = Path(stream.name)
+                json.dump(info, stream)
+            os.replace(temporary, metadata)
+            temporary = None
+            return CachedFile(target, url, stamp, False)
         finally:
             if temporary:
                 temporary.unlink(missing_ok=True)
+
+    def _write_response(self, response, stream, signature: bytes, cancel: Event | None) -> int:
+        total = 0
+        started = time.monotonic()
+        while True:
+            self._check_cancelled(cancel)
+            chunk = response.read(128 * 1024)
+            if not chunk:
+                break
+            if total == 0 and not chunk.startswith(signature):
+                raise WeatherError("NOAA returned an unexpected file format; no observations were accepted.")
+            total += len(chunk)
+            if total > self.max_bytes or time.monotonic() - started > 120:
+                raise WeatherError("The archive download exceeded its size or time limit.")
+            stream.write(chunk)
+        if not total:
+            raise WeatherError("NOAA returned an empty archive file.")
+        length = response.headers.get("Content-Length")
+        if length and total != int(length):
+            raise WeatherError("The archive download was incomplete. Please try again.")
+        return total
