@@ -101,7 +101,6 @@ class RainshineApp:
         controls = ttk.Frame(root, padding=(28, 12, 28, 10))
         controls.grid(row=1, column=0, sticky="ew")
         controls.grid_columnconfigure(5, weight=1)
-        ttk.Label(controls, text="DATE", style="Muted.TLabel").grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 7))
         self.month_box = ttk.Combobox(controls, textvariable=self.month, values=tuple(calendar.month_name)[1:], state="readonly", width=12)
         self.day_box = ttk.Combobox(controls, textvariable=self.day, values=days_in_month(1989, 1), state="readonly", width=4)
         self.year_box = ttk.Combobox(controls, textvariable=self.year, values=tuple(range(MIN_DATE.year, MAX_DATE.year + 1)), state="readonly", width=6)
@@ -125,13 +124,16 @@ class RainshineApp:
         body = ttk.Frame(root, padding=(28, 0, 28, 0))
         body.grid(row=3, column=0, sticky="nsew")
         body.grid_columnconfigure(0, weight=1)
-        body.grid_rowconfigure(4, weight=1)
-        self.heading = ttk.Label(body, text="", style="Heading.TLabel")
+        body.grid_rowconfigure(3, weight=1)
+        self.result_heading = ttk.Frame(body)
+        self.result_heading.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        self.result_heading.grid_columnconfigure(1, weight=1)
+        self.heading = ttk.Label(self.result_heading, text="", style="Heading.TLabel")
         self.heading.grid(row=0, column=0, sticky="w")
-        self.subtitle = ttk.Label(body, text="", style="Muted.TLabel", wraplength=950)
-        self.subtitle.grid(row=1, column=0, sticky="w", pady=(5, 8))
+        self.subtitle = ttk.Label(self.result_heading, text="", style="Muted.TLabel", wraplength=550)
+        self.subtitle.grid(row=0, column=1, sticky="w", padx=(12, 0))
         cards = ttk.Frame(body)
-        cards.grid(row=2, column=0, sticky="ew", pady=(0, 8))
+        cards.grid(row=1, column=0, sticky="ew", pady=(0, 8))
         self.metrics = {}
         for column, (key, title) in enumerate((("TMAX", "Recorded high"), ("TMIN", "Recorded low"), ("PRCP", "Reported precipitation"), ("SNOW", "Recorded snowfall"))):
             cards.grid_columnconfigure(column, weight=1, uniform="metric")
@@ -142,9 +144,9 @@ class RainshineApp:
             label.pack(anchor="w", pady=(4, 0))
             self.metrics[key] = label
         self.daily_source = ttk.Label(body, text="", style="Muted.TLabel", wraplength=950)
-        self.daily_source.grid(row=3, column=0, sticky="w", pady=(0, 12))
+        self.daily_source.grid(row=2, column=0, sticky="w", pady=(0, 12))
         self.tabs = ttk.Notebook(body)
-        self.tabs.grid(row=4, column=0, sticky="nsew")
+        self.tabs.grid(row=3, column=0, sticky="nsew")
         overview, readings, sources = (ttk.Frame(self.tabs, padding=12) for _ in range(3))
         self.tabs.add(overview, text="Through the day")
         self.tabs.add(readings, text="Recorded readings")
@@ -221,11 +223,16 @@ class RainshineApp:
         if event.widget is self.root:
             width = event.width
             self.footer_label.configure(wraplength=max(300, width - 390))
-            for label in (self.subtitle, self.daily_source):
-                label.configure(wraplength=max(300, width - 65))
+            self.daily_source.configure(wraplength=max(300, width - 65))
+            self._fit_result_heading(width)
             for label in (self.hourly_source, self.chart_note, self.extra):
                 label.configure(wraplength=max(300, width - 100))
             self.root.after_idle(self._resize_overview)
+
+    def _fit_result_heading(self, width=None):
+        width = width if width is not None else max(self.root.winfo_width(), 920)
+        available = max(180, width - 56 - self.heading.winfo_reqwidth() - 12)
+        self.subtitle.configure(wraplength=available)
 
     def _resize_overview(self, event=None):
         view, content = self.overview_view, self.overview_content
@@ -342,7 +349,8 @@ class RainshineApp:
 
     def _render_empty(self, title: str, subtitle: str):
         self.heading.configure(text=title)
-        self.subtitle.configure(text=subtitle)
+        self.subtitle.configure(text=f"| {subtitle}" if subtitle else "")
+        self._fit_result_heading()
         for label in self.metrics.values():
             label.configure(text="—")
         self.daily_source.configure(text="Daily station records will appear here. — means not recorded.")
@@ -359,7 +367,8 @@ class RainshineApp:
         if report is None:
             return
         self.heading.configure(text=day_title(report))
-        self.subtitle.configure(text=report.location.name)
+        location_name = report.location.name.replace(" – ", ", ")
+        self.subtitle.configure(text=f"| {location_name}")
         d = report.daily
         values = d.readings if d else {}
         for key in ("TMAX", "TMIN"):
@@ -395,7 +404,7 @@ class RainshineApp:
         self.save_button.configure(state="normal")
         if report.status == "future":
             self.heading.configure(text="No recorded weather yet")
-            self.subtitle.configure(text=f"{day_title(report)} · {report.location.name}")
+            self.subtitle.configure(text=f"| {day_title(report)} · {location_name}")
             self.status.set(report.notes[0])
         elif report.status in {"unavailable", "error"}:
             self.status.set(report.notes[0])
@@ -405,6 +414,7 @@ class RainshineApp:
             if (d and d.stale) or (h and h.stale):
                 cached = "Showing previously downloaded records; NOAA could not be refreshed."
             self.status.set(("Partial record. " if report.status == "partial" else "") + cached)
+        self._fit_result_heading()
         self._draw_chart()
 
     def _draw_chart(self):
