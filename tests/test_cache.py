@@ -61,13 +61,15 @@ class CacheTests(unittest.TestCase):
     def test_http_404_is_missing_data(self):
         def opener(request, timeout):
             raise urllib.error.HTTPError(request.full_url, 404, "Missing", {}, None)
+        cache = ArchiveCache(self.path, opener=opener)
         with self.assertRaises(NotFound):
-            ArchiveCache(self.path, opener=opener).fetch(URL, signature=b"STATION|")
+            cache.fetch(URL, signature=b"STATION|")
 
     def test_untrusted_download_urls_are_rejected(self):
+        cache = ArchiveCache(self.path)
         for url in ["http://www.ncei.noaa.gov/x", "https://example.com/weather", "file:///etc/passwd"]:
             with self.assertRaises(WeatherError):
-                ArchiveCache(self.path).fetch(url, signature=b"STATION|")
+                cache.fetch(url, signature=b"STATION|")
 
     def test_cancellation_prevents_network_access(self):
         cancel = Event(); cancel.set()
