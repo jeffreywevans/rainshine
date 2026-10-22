@@ -205,7 +205,6 @@ class RainshineApp:
         self.copy_button.grid(row=0, column=1, padx=(0, 8))
         self.save_button = ttk.Button(footer, text="Save JSON", command=self.save_json, state="disabled")
         self.save_button.grid(row=0, column=2)
-        ttk.Label(footer, text=f"NOAA observations  ·  Rainshine {__version__}", style="Muted.TLabel").grid(row=1, column=0, columnspan=3, sticky="w", pady=(6, 0))
 
     def _date_changed(self, event=None):
         month = list(calendar.month_name).index(self.month.get())

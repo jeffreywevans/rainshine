@@ -42,7 +42,7 @@ as a Windows GUI entry point. No API key or account is required.
    identifiers, distances, download times, flags, gaps, and source URLs.
 5. Use **Copy summary** or **Save JSON** to keep a result and its provenance.
 
-The version is visible in the title bar and footer. Downloads are cached in
+The version is visible in the title bar. Downloads are cached in
 the user's local cache directory, outside the installed package. Cancellation
 stops the active lookup without freezing the window. Previously downloaded
 observations can be displayed offline; an expired saved copy is labelled if
