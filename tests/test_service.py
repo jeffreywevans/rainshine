@@ -112,9 +112,10 @@ class ServiceTests(unittest.TestCase):
                     raise NotFound("No record")
 
                 cache.fetch = fetch
+                service = WeatherService(FakeCatalog(self.site), cache, self.clock)
+                cancel = Event()
                 with self.assertRaises(Cancelled):
-                    WeatherService(FakeCatalog(self.site), cache, self.clock).fetch(
-                        "Example", DAY, cancel=Event())
+                    service.fetch("Example", DAY, cancel=cancel)
 
     def test_archive_failure_preserves_available_record_and_warning(self):
         daily = write(self.path / "daily", daily_line("TMAX", 20))
