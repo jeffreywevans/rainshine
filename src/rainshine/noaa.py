@@ -50,6 +50,24 @@ def station_url(station: Station, year: int | None = None) -> str:
             f"access/by-year/{year}/psv/GHCNh_{station.id}_{year}.psv")
 
 
+def _daily_reading(cell: str, element: str) -> tuple[Reading | None, int]:
+    """Decode one daily cell, keeping missing and rejected values distinct."""
+    try:
+        raw = int(cell[:5])
+    except ValueError as exc:
+        raise WeatherError("NOAA returned an invalid daily value.") from exc
+    if raw == -9999:
+        return None, 0
+    measurement, quality, source = (c.strip() for c in cell[5:8])
+    # A nonblank daily QFLAG means a failed NOAA quality check. P and I
+    # precipitation flags are presumed/missing, not measured dry days.
+    if quality or (element == "PRCP" and measurement in {"P", "I"}):
+        return None, 1
+    divisor = DAILY_DIVISORS.get(element, 1)
+    value = raw / divisor if divisor != 1 else raw
+    return Reading(value, measurement, quality, source), 0
+
+
 def read_daily(path: Path, station: Station, day: date, cancel: Event | None = None) -> DailyRecord | None:
     readings = {}
     rejected = 0
@@ -67,21 +85,10 @@ def read_daily(path: Path, station: Station, day: date, cancel: Event | None = N
                 continue
             offset = 21 + (day.day - 1) * 8
             cell = line[offset:offset + 8]
-            try:
-                raw = int(cell[:5])
-            except ValueError as exc:
-                raise WeatherError("NOAA returned an invalid daily value.") from exc
-            if raw == -9999:
-                continue
-            measurement, quality, source = (c.strip() for c in cell[5:8])
-            # A nonblank daily QFLAG means a failed NOAA quality check. P and I
-            # precipitation flags are presumed/missing, not measured dry days.
-            if quality or (element == "PRCP" and measurement in {"P", "I"}):
-                rejected += 1
-                continue
-            divisor = DAILY_DIVISORS.get(element, 1)
-            value = raw / divisor if divisor != 1 else raw
-            readings[element] = Reading(value, measurement, quality, source)
+            reading, bad = _daily_reading(cell, element)
+            rejected += bad
+            if reading is not None:
+                readings[element] = reading
     return DailyRecord(station, day, readings, rejected_values=rejected) if readings else None
 
 

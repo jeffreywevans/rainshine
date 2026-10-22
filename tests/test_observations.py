@@ -6,7 +6,7 @@ from pathlib import Path
 from threading import Event
 
 from helpers import DAILY, DAY, HOURLY, daily_line, hourly_text, write
-from rainshine.models import Cancelled, DayReport, Location, Reading, MAX_DATE, MIN_DATE, days_in_month, utc_window, validate_date
+from rainshine.models import Cancelled, DayReport, Location, Reading, WeatherError, MAX_DATE, MIN_DATE, days_in_month, utc_window, validate_date
 from rainshine.noaa import accepted_hourly_quality, read_daily, read_hourly, reported_sky
 from rainshine.presentation import amount, temperature
 
@@ -75,6 +75,23 @@ class ParserTests(unittest.TestCase):
     def test_daily_precip_flag_e_is_not_an_estimation_code(self):
         write(self.path, daily_line("PRCP", 124, measurement="E"))
         self.assertAlmostEqual(read_daily(self.path, DAILY, DAY).readings["PRCP"].value, 12.4)
+
+    def test_daily_rejection_count_excludes_missing_values(self):
+        write(self.path, daily_line("TMAX", 100) + daily_line("TMIN", -9999)
+              + daily_line("PRCP", 0, measurement="P") + daily_line("SNOW", 10, quality="X"))
+        record = read_daily(self.path, DAILY, DAY)
+        self.assertEqual(set(record.readings), {"TMAX"})
+        self.assertEqual(record.rejected_values, 2)
+
+    def test_malformed_daily_records_raise_clear_errors(self):
+        valid = daily_line("TMAX", 100)
+        offset = 21 + (DAY.day - 1) * 8
+        invalid = valid[:offset] + "abcde" + valid[offset + 5:]
+        for content, message in ((valid[:30], "truncated"), (invalid, "invalid daily value")):
+            with self.subTest(message=message):
+                write(self.path, content)
+                with self.assertRaisesRegex(WeatherError, message):
+                    read_daily(self.path, DAILY, DAY)
 
     def test_quality_five_depends_on_original_source(self):
         self.assertTrue(accepted_hourly_quality("5", "313"))
