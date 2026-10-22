@@ -110,6 +110,44 @@ class ParserTests(unittest.TestCase):
         self.assertIsNone(reported_sky({"sky_condition": "08;;"}))
         self.assertIsNone(reported_sky({"sky_cover_layer_1": "OVC:08", "sky_cover_layer_1_Quality_Code": "2", "sky_cover_layer_1_Source_Code": "223"}))
 
+    def test_hourly_ranges_preserve_boundaries_and_rejection_counts(self):
+        cases = [
+            ("relative_humidity", "0", True, 0),
+            ("relative_humidity", "100", True, 0),
+            ("relative_humidity", "101", False, 1),
+            ("wind_direction", "360", True, 0),
+            ("wind_direction", "361", False, 1),
+            ("wind_speed", "0", True, 0),
+            ("wind_speed", "-1", False, 1),
+            ("wind_gust", "-1", False, 1),
+            ("visibility", "-1", False, 1),
+            ("temperature", "-20", True, 0),
+            ("temperature", "invalid", False, 1),
+            ("temperature", "-9999", False, 0),
+            ("temperature", "inf", False, 0),
+            ("temperature", "", False, 0),
+        ]
+        start, end = utc_window(DAY, "America/New_York")
+        for name, value, accepted, rejected in cases:
+            with self.subTest(name=name, value=value):
+                write(self.path, hourly_text([{name: value}]))
+                observations, bad, count = read_hourly(self.path, HOURLY, start, end)
+                self.assertEqual(bool(observations), accepted)
+                self.assertEqual(bad, rejected)
+                self.assertEqual(count, 1)
+                if accepted:
+                    self.assertEqual(observations[0].readings[name].value, float(value))
+
+    def test_hourly_timestamps_normalize_to_utc(self):
+        rows = [{"DATE": stamp, "temperature": "1"} for stamp in (
+            "2010-02-06T12:00:00", "2010-02-06T12:00:00Z", "2010-02-06T07:00:00-05:00",
+        )]
+        write(self.path, hourly_text(rows))
+        start, end = utc_window(DAY, "America/New_York")
+        observations, bad, count = read_hourly(self.path, HOURLY, start, end)
+        self.assertEqual([o.time for o in observations], [datetime(2010, 2, 6, 12, tzinfo=timezone.utc)] * 3)
+        self.assertEqual((bad, count), (0, 3))
+
     def test_parser_cancellation(self):
         write(self.path, daily_line("TMAX", 100))
         event = Event(); event.set()

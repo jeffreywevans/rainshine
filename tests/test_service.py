@@ -3,11 +3,13 @@ import unittest
 from dataclasses import replace
 from datetime import date, datetime, timezone
 from pathlib import Path
+from threading import Event
+from unittest.mock import patch
 
 from helpers import DAILY, DAY, HOURLY, daily_line, hourly_text, write
 from rainshine.cache import CachedFile
 from rainshine.catalog import Catalog
-from rainshine.models import Location, NotFound, WeatherError
+from rainshine.models import Cancelled, Location, NotFound, Observation, Reading, WeatherError
 from rainshine.noaa import station_url
 from rainshine.service import WeatherService
 
@@ -98,6 +100,55 @@ class ServiceTests(unittest.TestCase):
         report = WeatherService(FakeCatalog(site), FakeCache({station_url(HOURLY, 1988): hourly}), self.clock).fetch("Example", date(1989, 1, 1))
         self.assertEqual(len(report.hourly.observations), 1)
         self.assertEqual(report.status, "partial")
+
+    def test_cancellation_during_either_archive_lookup_propagates(self):
+        for dataset in ("ghcnd", "ghcnh"):
+            with self.subTest(dataset=dataset):
+                cache = FakeCache({})
+
+                def fetch(url, **kwargs):
+                    if ("/daily/" in url) == (dataset == "ghcnd"):
+                        raise Cancelled("Lookup cancelled.")
+                    raise NotFound("No record")
+
+                cache.fetch = fetch
+                with self.assertRaises(Cancelled):
+                    WeatherService(FakeCatalog(self.site), cache, self.clock).fetch(
+                        "Example", DAY, cancel=Event())
+
+    def test_archive_failure_preserves_available_record_and_warning(self):
+        daily = write(self.path / "daily", daily_line("TMAX", 20))
+        cache = FakeCache({station_url(DAILY): daily})
+        original_fetch = cache.fetch
+
+        def fetch(url, **kwargs):
+            if url == station_url(DAILY):
+                return original_fetch(url, **kwargs)
+            raise WeatherError("Archive unavailable")
+
+        cache.fetch = fetch
+        report = WeatherService(FakeCatalog(self.site), cache, self.clock).fetch("Example", DAY)
+        self.assertEqual(report.status, "partial")
+        self.assertIsNotNone(report.daily)
+        self.assertIsNone(report.hourly)
+        self.assertTrue(any("Some archive requests failed" in note for note in report.notes))
+
+    def test_duplicate_observations_merge_fields_and_preserve_first_reading(self):
+        instant = datetime(2010, 2, 6, 12, tzinfo=timezone.utc)
+        observations = [
+            Observation(instant, {"temperature": Reading(1)}),
+            Observation(instant, {"temperature": Reading(2), "wind_speed": Reading(3)}, "OVC"),
+        ]
+        cache = FakeCache({station_url(HOURLY, 2010): self.path / "hourly"})
+        with patch("rainshine.service.read_hourly", return_value=(observations, 2, 2)):
+            report = WeatherService(FakeCatalog(self.site), cache, self.clock).fetch("Example", DAY)
+        self.assertEqual(len(report.hourly.observations), 1)
+        merged = report.hourly.observations[0]
+        self.assertEqual(merged.readings, {"temperature": Reading(1), "wind_speed": Reading(3)})
+        self.assertEqual(merged.sky, "OVC")
+        self.assertEqual(report.hourly.rejected_values, 2)
+        self.assertEqual(report.hourly.raw_report_count, 2)
+        self.assertTrue(any("2 suspect" in note for note in report.notes))
 
 
 class PackagedCatalogTests(unittest.TestCase):

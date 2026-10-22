@@ -11,8 +11,8 @@ from threading import Event
 from .catalog import STATION_ID
 from .models import Cancelled, DailyRecord, Observation, Reading, Station, UTC, WeatherError
 
-DAILY_SCALES = {"TMAX": 0.1, "TMIN": 0.1, "TAVG": 0.1, "PRCP": 0.1,
-                "SNOW": 1, "SNWD": 1, "AWND": 0.1, "WSFG": 0.1, "RHAV": 1}
+DAILY_DIVISORS = {"TMAX": 10, "TMIN": 10, "TAVG": 10, "PRCP": 10,
+                  "SNOW": 1, "SNWD": 1, "AWND": 10, "WSFG": 10, "RHAV": 1}
 DAILY_WEATHER = {"WT01": "Fog", "WT02": "Heavy fog", "WT03": "Thunder", "WT04": "Ice pellets or sleet",
                  "WT05": "Hail", "WT06": "Glaze or rime", "WT08": "Smoke or haze", "WT09": "Blowing snow",
                  "WT11": "Strong wind", "WT14": "Drizzle", "WT16": "Rain", "WT17": "Freezing rain", "WT18": "Snow"}
@@ -63,7 +63,7 @@ def read_daily(path: Path, station: Station, day: date, cancel: Event | None = N
             if len(line.rstrip("\r\n")) < 269:
                 raise WeatherError("NOAA returned a truncated daily record.")
             element = line[17:21]
-            if element not in DAILY_SCALES and element not in DAILY_WEATHER:
+            if element not in DAILY_DIVISORS and element not in DAILY_WEATHER:
                 continue
             offset = 21 + (day.day - 1) * 8
             cell = line[offset:offset + 8]
@@ -79,7 +79,8 @@ def read_daily(path: Path, station: Station, day: date, cancel: Event | None = N
             if quality or (element == "PRCP" and measurement in {"P", "I"}):
                 rejected += 1
                 continue
-            value = raw / 10 if DAILY_SCALES.get(element) == 0.1 else raw
+            divisor = DAILY_DIVISORS.get(element, 1)
+            value = raw / divisor if divisor != 1 else raw
             readings[element] = Reading(value, measurement, quality, source)
     return DailyRecord(station, day, readings, rejected_values=rejected) if readings else None
 
@@ -97,6 +98,56 @@ def accepted_hourly_quality(quality: str, source: str) -> bool:
     return quality in {"0", "1", "9"}
 
 
+def _hourly_timestamp(text: str) -> datetime:
+    try:
+        stamp = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        return stamp.replace(tzinfo=UTC) if stamp.tzinfo is None else stamp.astimezone(UTC)
+    except (TypeError, ValueError) as exc:
+        raise WeatherError("NOAA returned an invalid observation timestamp.") from exc
+
+
+def _hourly_reading(row: dict[str, str], name: str) -> tuple[Reading | None, int]:
+    """Decode one field, distinguishing missing data from rejected values."""
+    text = (row.get(name) or "").strip()
+    if not text:
+        return None, 0
+    try:
+        value = float(text)
+    except ValueError:
+        return None, 1
+    measurement = (row.get(name + "_Measurement_Code") or "").strip()
+    quality = (row.get(name + "_Quality_Code") or "").strip()
+    source = (row.get(name + "_Source_Code") or "").strip()
+    if math.isclose(value, -9999, rel_tol=0, abs_tol=1e-9) or not math.isfinite(value):
+        return None, 0
+    if measurement == "E" or not accepted_hourly_quality(quality, source):
+        return None, 1
+    if not _valid_hourly_range(name, value):
+        return None, 1
+    return Reading(value, measurement, quality, source), 0
+
+
+def _valid_hourly_range(name: str, value: float) -> bool:
+    if name == "relative_humidity":
+        return 0 <= value <= 100
+    if name == "wind_direction":
+        return 0 <= value <= 360
+    if name in {"wind_speed", "wind_gust", "visibility"}:
+        return value >= 0
+    return True
+
+
+def _hourly_readings(row: dict[str, str]) -> tuple[dict[str, Reading], int]:
+    readings = {}
+    rejected = 0
+    for name in HOURLY_PARAMETERS:
+        reading, bad = _hourly_reading(row, name)
+        rejected += bad
+        if reading is not None:
+            readings[name] = reading
+    return readings, rejected
+
+
 def read_hourly(path: Path, station: Station, start: datetime, end: datetime,
                 cancel: Event | None = None) -> tuple[list[Observation], int, int]:
     observations = []
@@ -111,42 +162,12 @@ def read_hourly(path: Path, station: Station, start: datetime, end: datetime,
                 raise Cancelled("Lookup cancelled.")
             if row.get("STATION") != station.id:
                 raise WeatherError("The hourly file contains a different station identifier.")
-            try:
-                stamp = datetime.fromisoformat(row["DATE"].replace("Z", "+00:00"))
-                stamp = stamp.replace(tzinfo=UTC) if stamp.tzinfo is None else stamp.astimezone(UTC)
-            except (TypeError, ValueError) as exc:
-                raise WeatherError("NOAA returned an invalid observation timestamp.") from exc
+            stamp = _hourly_timestamp(row["DATE"])
             if not start <= stamp < end:
                 continue
             reports += 1
-            readings = {}
-            for name in HOURLY_PARAMETERS:
-                text = (row.get(name) or "").strip()
-                if not text:
-                    continue
-                try:
-                    value = float(text)
-                except ValueError:
-                    rejected += 1
-                    continue
-                measurement = (row.get(name + "_Measurement_Code") or "").strip()
-                quality = (row.get(name + "_Quality_Code") or "").strip()
-                source = (row.get(name + "_Source_Code") or "").strip()
-                if value == -9999 or not math.isfinite(value):
-                    continue
-                if measurement == "E" or not accepted_hourly_quality(quality, source):
-                    rejected += 1
-                    continue
-                if name == "relative_humidity" and not 0 <= value <= 100:
-                    rejected += 1
-                    continue
-                if name == "wind_direction" and not 0 <= value <= 360:
-                    rejected += 1
-                    continue
-                if name in {"wind_speed", "wind_gust", "visibility"} and value < 0:
-                    rejected += 1
-                    continue
-                readings[name] = Reading(value, measurement, quality, source)
+            readings, bad = _hourly_readings(row)
+            rejected += bad
             if readings:
                 observations.append(Observation(stamp, readings, reported_sky(row)))
     return observations, rejected, reports

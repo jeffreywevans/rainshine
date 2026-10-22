@@ -26,6 +26,12 @@ TEAL = "#087f83"
 BORDER = "#dce5eb"
 BLUE = "#397db8"
 
+FONT_FAMILY = "Segoe UI"
+MUTED_LABEL_STYLE = "Muted.TLabel"
+ACCENT_BUTTON_STYLE = "Accent.TButton"
+CONFIGURE_EVENT = "<Configure>"
+COMBOBOX_SELECTED_EVENT = "<<ComboboxSelected>>"
+
 
 class RainshineApp:
     def __init__(self, root: tk.Tk, service: WeatherService | None = None):
@@ -45,20 +51,20 @@ class RainshineApp:
         style.theme_use("clam")
         style.configure("TFrame", background=BG)
         style.configure("Paper.TFrame", background=PAPER)
-        style.configure("TLabel", background=BG, foreground=INK, font=("Segoe UI", 10))
-        style.configure("Muted.TLabel", foreground=MUTED)
+        style.configure("TLabel", background=BG, foreground=INK, font=(FONT_FAMILY, 10))
+        style.configure(MUTED_LABEL_STYLE, foreground=MUTED)
         style.configure("Paper.TLabel", background=PAPER)
-        style.configure("Heading.TLabel", font=("Segoe UI", 17, "bold"))
-        style.configure("TButton", font=("Segoe UI", 10), padding=(15, 9))
-        style.configure("Accent.TButton", background=TEAL, foreground="white", borderwidth=0)
-        style.map("Accent.TButton", background=[("active", "#06676b"), ("disabled", "#bbced0")])
-        style.configure("TCombobox", padding=7, font=("Segoe UI", 11), fieldbackground=PAPER)
-        style.configure("Treeview", rowheight=28, font=("Segoe UI", 10), background=PAPER, fieldbackground=PAPER, foreground=INK)
-        style.configure("Treeview.Heading", font=("Segoe UI", 10, "bold"), background="#e5eef3", padding=(8, 7))
+        style.configure("Heading.TLabel", font=(FONT_FAMILY, 17, "bold"))
+        style.configure("TButton", font=(FONT_FAMILY, 10), padding=(15, 9))
+        style.configure(ACCENT_BUTTON_STYLE, background=TEAL, foreground="white", borderwidth=0)
+        style.map(ACCENT_BUTTON_STYLE, background=[("active", "#06676b"), ("disabled", "#bbced0")])
+        style.configure("TCombobox", padding=7, font=(FONT_FAMILY, 11), fieldbackground=PAPER)
+        style.configure("Treeview", rowheight=28, font=(FONT_FAMILY, 10), background=PAPER, fieldbackground=PAPER, foreground=INK)
+        style.configure("Treeview.Heading", font=(FONT_FAMILY, 10, "bold"), background="#e5eef3", padding=(8, 7))
         style.configure("TNotebook", background=BG, borderwidth=0)
-        style.configure("TNotebook.Tab", font=("Segoe UI", 10), padding=(17, 8))
+        style.configure("TNotebook.Tab", font=(FONT_FAMILY, 10), padding=(17, 8))
         style.configure("Horizontal.TProgressbar", troughcolor=BG, background=TEAL, borderwidth=0)
-        root.option_add("*TCombobox*Listbox.font", ("Segoe UI", 11))
+        root.option_add("*TCombobox*Listbox.font", (FONT_FAMILY, 11))
         root.option_add("*TCombobox*Listbox.selectBackground", TEAL)
         self.month = tk.StringVar(value="January")
         self.day = tk.StringVar(value="1")
@@ -68,7 +74,7 @@ class RainshineApp:
         self.status = tk.StringVar(value="Ready. Choose a date and a site, then show the weather.")
         self._build()
         self._set_busy(False)
-        root.bind("<Configure>", self._resize)
+        root.bind(CONFIGURE_EVENT, self._resize)
         root.bind("<MouseWheel>", self._scroll_overview, add="+")
         root.bind("<Button-4>", self._scroll_overview, add="+")
         root.bind("<Button-5>", self._scroll_overview, add="+")
@@ -92,11 +98,11 @@ class RainshineApp:
         logo.create_oval(17, 16, 42, 39, fill="#e2eff5", outline="")
         logo.create_oval(31, 24, 51, 40, fill="#e2eff5", outline="")
         logo.create_rectangle(22, 30, 44, 40, fill="#e2eff5", outline="")
-        tk.Label(header, text="rainshine", background=INK, foreground=PAPER, font=("Segoe UI", 26, "bold")).grid(row=0, column=1, sticky="w")
-        tk.Label(header, text="A date. A place. The weather as recorded.", background=INK, foreground="#c7dae6", font=("Segoe UI", 11)).grid(row=1, column=1, sticky="w")
+        tk.Label(header, text="rainshine", background=INK, foreground=PAPER, font=(FONT_FAMILY, 26, "bold")).grid(row=0, column=1, sticky="w")
+        tk.Label(header, text="A date. A place. The weather as recorded.", background=INK, foreground="#c7dae6", font=(FONT_FAMILY, 11)).grid(row=1, column=1, sticky="w")
         unit = ttk.Combobox(header, textvariable=self.units, state="readonly", values=("°F · inches", "°C · millimeters"), width=18)
         unit.grid(row=0, column=2, rowspan=2, sticky="e")
-        unit.bind("<<ComboboxSelected>>", lambda event: self._render(self.report) if self.report else None)
+        unit.bind(COMBOBOX_SELECTED_EVENT, lambda event: self._render(self.report) if self.report else None)
 
         controls = ttk.Frame(root, padding=(28, 12, 28, 10))
         controls.grid(row=1, column=0, sticky="ew")
@@ -106,18 +112,18 @@ class RainshineApp:
         self.year_box = ttk.Combobox(controls, textvariable=self.year, values=tuple(range(MIN_DATE.year, MAX_DATE.year + 1)), state="readonly", width=6)
         for col, widget in enumerate((self.month_box, self.day_box, self.year_box)):
             widget.grid(row=1, column=col, sticky="w", padx=(0, 9))
-            widget.bind("<<ComboboxSelected>>", self._date_changed)
-        self.lookup_button = ttk.Button(controls, text="Show weather", style="Accent.TButton", command=self.lookup)
+            widget.bind(COMBOBOX_SELECTED_EVENT, self._date_changed)
+        self.lookup_button = ttk.Button(controls, text="Show weather", style=ACCENT_BUTTON_STYLE, command=self.lookup)
         self.lookup_button.grid(row=1, column=6, sticky="e", padx=(16, 0))
         self.cancel_button = ttk.Button(controls, text="Cancel", command=self.cancel, state="disabled")
         self.cancel_button.grid(row=1, column=7, padx=(8, 0))
-        ttk.Label(controls, text=f"SITE  ·  {len(self.service.catalog.names)} locations", style="Muted.TLabel").grid(row=2, column=0, columnspan=6, sticky="w", pady=(10, 7))
+        ttk.Label(controls, text=f"SITE  ·  {len(self.service.catalog.names)} locations", style=MUTED_LABEL_STYLE).grid(row=2, column=0, columnspan=6, sticky="w", pady=(10, 7))
         self.site_box = ttk.Combobox(controls, textvariable=self.site, values=self.service.catalog.names, height=16)
         self.site_box.grid(row=3, column=0, columnspan=8, sticky="ew")
         self.site_box.bind("<KeyRelease>", self._filter_sites)
-        self.site_box.bind("<<ComboboxSelected>>", self._site_selected)
+        self.site_box.bind(COMBOBOX_SELECTED_EVENT, self._site_selected)
         self.site_box.bind("<Return>", lambda event: self.lookup())
-        ttk.Label(controls, text="Type a city or venue to narrow the list. The actual observing station is shown with the results.", style="Muted.TLabel").grid(row=4, column=0, columnspan=8, sticky="w", pady=(5, 0))
+        ttk.Label(controls, text="Type a city or venue to narrow the list. The actual observing station is shown with the results.", style=MUTED_LABEL_STYLE).grid(row=4, column=0, columnspan=8, sticky="w", pady=(5, 0))
         self.progress = ttk.Progressbar(root, mode="indeterminate", maximum=100)
         self.progress.grid(row=2, column=0, sticky="ew", padx=28, pady=(0, 12))
 
@@ -130,7 +136,7 @@ class RainshineApp:
         self.result_heading.grid_columnconfigure(1, weight=1)
         self.heading = ttk.Label(self.result_heading, text="", style="Heading.TLabel")
         self.heading.grid(row=0, column=0, sticky="w")
-        self.subtitle = ttk.Label(self.result_heading, text="", style="Muted.TLabel", wraplength=550)
+        self.subtitle = ttk.Label(self.result_heading, text="", style=MUTED_LABEL_STYLE, wraplength=550)
         self.subtitle.grid(row=0, column=1, sticky="w", padx=(12, 0))
         cards = ttk.Frame(body)
         cards.grid(row=1, column=0, sticky="ew", pady=(0, 8))
@@ -139,11 +145,11 @@ class RainshineApp:
             cards.grid_columnconfigure(column, weight=1, uniform="metric")
             card = tk.Frame(cards, background=PAPER, highlightbackground=BORDER, highlightthickness=1, padx=17, pady=10)
             card.grid(row=0, column=column, sticky="nsew", padx=(0 if column == 0 else 8, 0))
-            tk.Label(card, text=title, background=PAPER, foreground=MUTED, font=("Segoe UI", 10)).pack(anchor="w")
-            label = tk.Label(card, text="—", background=PAPER, foreground=TEAL if key in {"TMAX", "TMIN"} else INK, font=("Segoe UI", 25, "bold"))
+            tk.Label(card, text=title, background=PAPER, foreground=MUTED, font=(FONT_FAMILY, 10)).pack(anchor="w")
+            label = tk.Label(card, text="—", background=PAPER, foreground=TEAL if key in {"TMAX", "TMIN"} else INK, font=(FONT_FAMILY, 25, "bold"))
             label.pack(anchor="w", pady=(4, 0))
             self.metrics[key] = label
-        self.daily_source = ttk.Label(body, text="", style="Muted.TLabel", wraplength=950)
+        self.daily_source = ttk.Label(body, text="", style=MUTED_LABEL_STYLE, wraplength=950)
         self.daily_source.grid(row=2, column=0, sticky="w", pady=(0, 12))
         self.tabs = ttk.Notebook(body)
         self.tabs.grid(row=3, column=0, sticky="nsew")
@@ -162,16 +168,16 @@ class RainshineApp:
         overview = ttk.Frame(self.overview_view)
         self.overview_content = overview
         self.overview_window = self.overview_view.create_window(0, 0, window=overview, anchor="nw")
-        self.overview_view.bind("<Configure>", self._resize_overview)
-        overview.bind("<Configure>", self._resize_overview)
+        self.overview_view.bind(CONFIGURE_EVENT, self._resize_overview)
+        overview.bind(CONFIGURE_EVENT, self._resize_overview)
         overview.grid_columnconfigure(0, weight=1)
         overview.grid_rowconfigure(1, weight=1)
-        self.hourly_source = ttk.Label(overview, text="", style="Muted.TLabel", wraplength=920)
+        self.hourly_source = ttk.Label(overview, text="", style=MUTED_LABEL_STYLE, wraplength=920)
         self.hourly_source.grid(row=0, column=0, sticky="w", pady=(0, 10))
         self.chart = tk.Canvas(overview, background=PAPER, height=190, highlightbackground=BORDER, highlightthickness=1)
         self.chart.grid(row=1, column=0, sticky="nsew")
-        self.chart.bind("<Configure>", lambda event: self._draw_chart())
-        self.chart_note = ttk.Label(overview, text="", style="Muted.TLabel", wraplength=920)
+        self.chart.bind(CONFIGURE_EVENT, lambda event: self._draw_chart())
+        self.chart_note = ttk.Label(overview, text="", style=MUTED_LABEL_STYLE, wraplength=920)
         self.chart_note.grid(row=2, column=0, sticky="w", pady=(9, 0))
         self.extra = ttk.Label(overview, text="", wraplength=920)
         self.extra.grid(row=3, column=0, sticky="w", pady=(9, 0))
@@ -187,10 +193,10 @@ class RainshineApp:
         scroll = ttk.Scrollbar(readings, orient="vertical", command=self.table.yview)
         scroll.grid(row=0, column=1, sticky="ns")
         self.table.configure(yscrollcommand=scroll.set)
-        ttk.Label(readings, text="Actual report times in the selected site's timezone. — means not recorded or excluded by quality checks.", style="Muted.TLabel").grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        ttk.Label(readings, text="Actual report times in the selected site's timezone. — means not recorded or excluded by quality checks.", style=MUTED_LABEL_STYLE).grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
         sources.grid_rowconfigure(0, weight=1)
         sources.grid_columnconfigure(0, weight=1)
-        self.source_text = tk.Text(sources, wrap="word", background=PAPER, foreground=INK, font=("Segoe UI", 10), padx=14, pady=12, borderwidth=0, height=9)
+        self.source_text = tk.Text(sources, wrap="word", background=PAPER, foreground=INK, font=(FONT_FAMILY, 10), padx=14, pady=12, borderwidth=0, height=9)
         self.source_text.grid(row=0, column=0, sticky="nsew")
         source_scroll = ttk.Scrollbar(sources, command=self.source_text.yview)
         source_scroll.grid(row=0, column=1, sticky="ns")
@@ -199,7 +205,7 @@ class RainshineApp:
         footer = ttk.Frame(root, padding=(28, 8, 28, 12))
         footer.grid(row=4, column=0, sticky="ew")
         footer.grid_columnconfigure(0, weight=1)
-        self.footer_label = ttk.Label(footer, textvariable=self.status, style="Muted.TLabel", wraplength=680)
+        self.footer_label = ttk.Label(footer, textvariable=self.status, style=MUTED_LABEL_STYLE, wraplength=680)
         self.footer_label.grid(row=0, column=0, sticky="w", padx=(0, 15))
         self.copy_button = ttk.Button(footer, text="Copy summary", command=self.copy_summary, state="disabled")
         self.copy_button.grid(row=0, column=1, padx=(0, 8))
@@ -368,6 +374,20 @@ class RainshineApp:
         self.heading.configure(text=day_title(report))
         location_name = report.location.name.replace(" – ", ", ")
         self.subtitle.configure(text=f"| {location_name}")
+        self._render_daily(report)
+        extras = self._render_hourly(report)
+        self._render_extras(report, extras)
+        self.table.delete(*self.table.get_children())
+        for row in observation_rows(report, self.imperial):
+            self.table.insert("", "end", values=row)
+        self._set_sources(summary_text(report, self.imperial) + "\n\nRecorded values and provenance\n\n" + json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+        self.copy_button.configure(state="normal")
+        self.save_button.configure(state="normal")
+        self._render_status(report, location_name)
+        self._fit_result_heading()
+        self._draw_chart()
+
+    def _render_daily(self, report: DayReport):
         d = report.daily
         values = d.readings if d else {}
         for key in ("TMAX", "TMIN"):
@@ -379,6 +399,8 @@ class RainshineApp:
             self.daily_source.configure(text=f"Daily record: {d.station.display_name} · {d.station.distance_km:.1f} km from the site · station reporting day")
         else:
             self.daily_source.configure(text="No usable daily station record was found. — means not recorded.")
+
+    def _render_hourly(self, report: DayReport) -> list[str]:
         h = report.hourly
         if h:
             self.hourly_source.configure(text=f"{h.station.display_name} · {h.station.distance_km:.1f} km away · {len(h.observations)} observation times")
@@ -389,18 +411,19 @@ class RainshineApp:
             self.hourly_source.configure(text="No subdaily observations were found for this selection.")
             self.chart_note.configure(text="")
             extras = []
+        return extras
+
+    def _render_extras(self, report: DayReport, extras: list[str]):
+        values = report.daily.readings if report.daily else {}
         if "SNWD" in values:
             extras.append("Recorded snow depth: " + amount(values["SNWD"], self.imperial))
         weather = [label for key, label in DAILY_WEATHER.items() if key in values and values[key].value > 0]
         if weather:
             extras.append("Station reported: " + ", ".join(weather))
         self.extra.configure(text="  ·  ".join(extras))
-        self.table.delete(*self.table.get_children())
-        for row in observation_rows(report, self.imperial):
-            self.table.insert("", "end", values=row)
-        self._set_sources(summary_text(report, self.imperial) + "\n\nRecorded values and provenance\n\n" + json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
-        self.copy_button.configure(state="normal")
-        self.save_button.configure(state="normal")
+
+    def _render_status(self, report: DayReport, location_name: str):
+        d, h = report.daily, report.hourly
         if report.status == "future":
             self.heading.configure(text="No recorded weather yet")
             self.subtitle.configure(text=f"| {day_title(report)} · {location_name}")
@@ -408,13 +431,11 @@ class RainshineApp:
         elif report.status in {"unavailable", "error"}:
             self.status.set(report.notes[0])
         else:
-            cache_flags = [r.from_cache for r in (d, h) if r]
+            cache_flags = (r.from_cache for r in (d, h) if r)
             cached = "Showing saved NOAA records." if all(cache_flags) else "NOAA records loaded and saved for later lookups."
             if (d and d.stale) or (h and h.stale):
                 cached = "Showing previously downloaded records; NOAA could not be refreshed."
             self.status.set(("Partial record. " if report.status == "partial" else "") + cached)
-        self._fit_result_heading()
-        self._draw_chart()
 
     def _draw_chart(self):
         canvas = self.chart
@@ -425,11 +446,11 @@ class RainshineApp:
             msg = "No subdaily temperature observations to plot."
             if report is None:
                 msg = "The day's recorded temperature will appear here."
-            canvas.create_text(w / 2, h / 2, text=msg, fill=MUTED, font=("Segoe UI", 12), width=w - 100)
+            canvas.create_text(w / 2, h / 2, text=msg, fill=MUTED, font=(FONT_FAMILY, 12), width=w - 100)
             return
         points = [(o.time, o.readings["temperature"].value) for o in report.hourly.observations if "temperature" in o.readings]
         if not points:
-            canvas.create_text(w / 2, h / 2, text="No usable temperature values were recorded.", fill=MUTED, font=("Segoe UI", 12))
+            canvas.create_text(w / 2, h / 2, text="No usable temperature values were recorded.", fill=MUTED, font=(FONT_FAMILY, 12))
             return
         start, end = utc_window(report.day, report.location.timezone)
         duration = (end - start).total_seconds()
@@ -443,12 +464,12 @@ class RainshineApp:
         for fraction in (0, .5, 1):
             y = bottom - (bottom - top) * fraction
             canvas.create_line(left, y, right, y, fill="#e8eef2")
-            canvas.create_text(left - 9, y, text=f"{low + (high - low) * fraction:.0f}°", anchor="e", fill=MUTED, font=("Segoe UI", 9))
+            canvas.create_text(left - 9, y, text=f"{low + (high - low) * fraction:.0f}°", anchor="e", fill=MUTED, font=(FONT_FAMILY, 9))
         tz = ZoneInfo(report.location.timezone)
         for hour in (0, 6, 12, 18):
             tick = datetime.combine(report.day, datetime.min.time(), tz) + timedelta(hours=hour)
             x, _ = xy(tick.astimezone(start.tzinfo), low)
-            canvas.create_text(x, bottom + 18, text=f"{hour:02d}:00", fill=MUTED, font=("Segoe UI", 9))
+            canvas.create_text(x, bottom + 18, text=f"{hour:02d}:00", fill=MUTED, font=(FONT_FAMILY, 9))
         previous = None
         for (stamp, _), value in zip(points, values):
             x, y = xy(stamp, value)
