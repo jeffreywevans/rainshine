@@ -121,4 +121,19 @@ run the same command with `DISPLAY` set. The test suite does not require a NOAA
 connection; parsers, date boundaries, quality codes, fallback selection, future
 dates, cache recovery, exports, and GUI interactions use controlled fixtures.
 
+To measure coverage from the checkout, install the hash-verified tooling and
+use an editable installation so reports reference the source files:
+
+```sh
+python -m pip install --require-hashes --only-binary :all: -r requirements-coverage.lock
+python -m pip install --no-index --no-deps --no-build-isolation --only-binary :all: -e .
+python -m coverage run -m unittest discover -s tests -v
+python -m coverage report
+python -m coverage xml
+```
+
+On headless Linux, prefix the coverage test command with `xvfb-run -a` to include
+GUI tests. The SonarQube workflow does this before importing `coverage.xml`.
+Generated coverage files are ignored by Git.
+
 Licensed under the existing [MIT license](LICENSE).
