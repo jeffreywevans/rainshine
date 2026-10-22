@@ -172,5 +172,6 @@ class PackagedCatalogTests(unittest.TestCase):
         self.assertTrue(all(s.first_year <= 1989 for s in candidates))
 
     def test_unknown_site_is_a_clear_error(self):
+        catalog = Catalog()
         with self.assertRaisesRegex(ValueError, "Choose a location"):
-            Catalog().location("not a site")
+            catalog.location("not a site")
