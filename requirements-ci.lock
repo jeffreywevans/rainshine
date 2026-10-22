@@ -1,0 +1,6 @@
+# CI build and runtime dependencies. Install with --require-hashes --only-binary :all:.
+# Update versions alongside pyproject.toml and verify wheel hashes against PyPI.
+setuptools==84.2.1 \
+    --hash=sha256:ca140b45d5325a9478f880e351484f62fef15f336462e449ca0c03c873d589c2
+tzdata==2026.5; sys_platform == "win32" \
+    --hash=sha256:b683bd1b6659ddcd810ff02ad09ba821d4bf1065072805063eb35c49617905ac
