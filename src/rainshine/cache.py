@@ -67,7 +67,7 @@ class ArchiveCache:
             if exc.code == 404:
                 raise NotFound("No archive file is available for that station and year.") from exc
             raise WeatherError(f"NOAA returned HTTP {exc.code}. Please try again later.") from exc
-        except (OSError, urllib.error.URLError, TimeoutError) as exc:
+        except OSError as exc:
             if old:
                 return CachedFile(old.path, old.url, old.retrieved_at, True, True)
             raise WeatherError("Could not reach NOAA. Check the internet connection and try again.") from exc
