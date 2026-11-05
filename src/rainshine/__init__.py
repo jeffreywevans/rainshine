@@ -1,3 +1,3 @@
 """Rainshine: recorded weather, presented simply."""
 
-__version__ = "0.1.2"
+__version__ = "0.6.5"
