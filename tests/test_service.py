@@ -155,7 +155,7 @@ class ServiceTests(unittest.TestCase):
 class PackagedCatalogTests(unittest.TestCase):
     def test_all_documented_settings_load_with_ordered_station_candidates(self):
         catalog = Catalog()
-        self.assertEqual(len(catalog.names), 238)
+        self.assertEqual(len(catalog.names), 269)
         for name in catalog.names:
             site = catalog.location(name)
             self.assertTrue(site.hourly)

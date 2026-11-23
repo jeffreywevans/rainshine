@@ -1,7 +1,7 @@
 # Rainshine
 
 A small Python desktop app for **the weather as recorded**. Choose a date and
-one of the 238 documented locations to see NOAA station records, a temperature
+one of the 269 documented locations to see NOAA station records, a temperature
 plot, and the actual observations behind the display.
 
 ![Rainshine showing recorded weather for Dayton, Ohio](docs/screenshot.png)
@@ -76,7 +76,7 @@ NOAA cannot be refreshed.
 ## Locations and source data
 
 The packaged catalog is derived from the previously researched Telegraphy
-location/station lookup. It includes all 238 settings, candidate NOAA stations,
+location/station lookup. It includes all 269 settings, candidate NOAA stations,
 coordinates, timezones, and inventory intervals. Venue coordinates and
 distances are approximate. This is a documented candidate set, rather than an
 exhaustive search of every sensor. Sites remain selectable for every supported
