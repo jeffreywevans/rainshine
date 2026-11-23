@@ -277,7 +277,97 @@ class ServiceTests(unittest.TestCase):
                 self.assertTrue(any("previously downloaded observations" in note for note in report.notes))
 
 
-class PackagedCatalogTests(unittest.TestCase):
+class CatalogTests(unittest.TestCase):
+    @staticmethod
+    def _minimal_catalog_data():
+        return {
+            "snapshot_year": 2026,
+            "ghcnh": {
+                HOURLY.id: {
+                    "name": HOURLY.name,
+                    "latitude": HOURLY.latitude,
+                    "longitude": HOURLY.longitude,
+                },
+            },
+            "ghcnd": {
+                DAILY.id: {
+                    "name": DAILY.name,
+                    "latitude": DAILY.latitude,
+                    "longitude": DAILY.longitude,
+                },
+            },
+            "locations": {
+                "Example": {
+                    "latitude": 39.76,
+                    "longitude": -84.19,
+                    "timezone": "America/New_York",
+                    "hourly": [HOURLY.id],
+                    "daily": [DAILY.id],
+                },
+            },
+        }
+
+    def test_explicit_catalog_data_builds_locations_and_rejects_invalid_station_ids(self):
+        data = self._minimal_catalog_data()
+        catalog = Catalog(data)
+        site = catalog.location("Example")
+        self.assertEqual(catalog.names, ("Example",))
+        self.assertEqual(site.hourly[0].id, HOURLY.id)
+        self.assertEqual(site.daily[0].id, DAILY.id)
+
+        invalid_data = self._minimal_catalog_data()
+        invalid_data["ghcnh"] = {"../unsafe": invalid_data["ghcnh"][HOURLY.id]}
+        with self.assertRaisesRegex(ValueError, "Invalid archive station identifier"):
+            Catalog(invalid_data)
+
+    def test_candidate_metadata_covers_daily_and_hourly_history_boundaries(self):
+        catalog = Catalog(self._minimal_catalog_data())
+        recent_daily = replace(
+            DAILY,
+            distance_km=3,
+            elements={"TMAX": {"first_year": 2010, "last_year": 2026}},
+        )
+        old_daily = replace(
+            DAILY,
+            id="USC00000002",
+            distance_km=2,
+            elements={"TMAX": {"first_year": 1989, "last_year": 2009}},
+        )
+        later_daily = replace(
+            DAILY,
+            id="USC00000003",
+            distance_km=1,
+            elements={"TMAX": {"first_year": 2011, "last_year": 2026}},
+        )
+        daily_stations = (recent_daily, old_daily, later_daily)
+        self.assertEqual(
+            [station.id for station in catalog.candidates(daily_stations, date(2010, 1, 1))],
+            [recent_daily.id],
+        )
+        self.assertEqual(
+            [station.id for station in catalog.candidates(daily_stations, date(2027, 1, 1))],
+            [later_daily.id, recent_daily.id],
+        )
+
+        recent_hourly = replace(HOURLY, distance_km=2, first_year=2010, last_year=2026, months={})
+        old_hourly = replace(
+            HOURLY,
+            id="USW00000002",
+            distance_km=1,
+            first_year=1989,
+            last_year=2009,
+            months={},
+        )
+        hourly_stations = (recent_hourly, old_hourly)
+        self.assertEqual(
+            [station.id for station in catalog.candidates(hourly_stations, date(2010, 1, 1))],
+            [recent_hourly.id],
+        )
+        self.assertEqual(
+            [station.id for station in catalog.candidates(hourly_stations, date(2027, 1, 1))],
+            [recent_hourly.id],
+        )
+
     def test_all_documented_settings_load_with_ordered_station_candidates(self):
         catalog = Catalog()
         self.assertEqual(len(catalog.names), 269)
