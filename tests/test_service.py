@@ -64,9 +64,10 @@ class ServiceTests(unittest.TestCase):
     def test_missing_timezone_data_is_a_readable_weather_error(self):
         cache = FakeCache({})
         missing = ZoneInfoNotFoundError(self.site.timezone)
+        service = WeatherService(FakeCatalog(self.site), cache, self.clock)
         with patch("rainshine.service.ZoneInfo", side_effect=missing):
             with self.assertRaisesRegex(WeatherError, "Timezone data is missing") as raised:
-                WeatherService(FakeCatalog(self.site), cache, self.clock).fetch("Example", DAY)
+                service.fetch("Example", DAY)
         self.assertIs(raised.exception.__cause__, missing)
         self.assertEqual(cache.calls, [])
 
@@ -74,8 +75,9 @@ class ServiceTests(unittest.TestCase):
         cache = FakeCache({})
         cancel = Event()
         cancel.set()
+        service = WeatherService(FakeCatalog(self.site), cache, self.clock)
         with self.assertRaisesRegex(Cancelled, "Lookup cancelled"):
-            WeatherService(FakeCatalog(self.site), cache, self.clock).fetch("Example", DAY, cancel=cancel)
+            service.fetch("Example", DAY, cancel=cancel)
         self.assertEqual(cache.calls, [])
 
     def test_missing_record_is_not_zero_weather(self):
