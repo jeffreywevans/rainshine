@@ -51,4 +51,5 @@ jobs:
           rainshine --list-sites
           xvfb-run -a python -m unittest discover -s tests -v
       - name: Publish distributions to PyPI
-        uses: pypa/gh-action-pypi-publish@aef6c9b6e301dc803e1bc9133e9ce67ae9b0906b # v1.14.3
+        # This Docker-backed action resolves its ref as a GHCR image tag.
+        uses: pypa/gh-action-pypi-publish@v1.14.3
