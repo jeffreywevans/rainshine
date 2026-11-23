@@ -6,12 +6,18 @@ import unittest
 import warnings
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import date
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from unittest.mock import Mock, patch
 
 from rainshine import __version__
 from rainshine.__main__ import main
 from rainshine.models import WeatherError
+
+
+def gui_module(launch):
+    module = ModuleType("rainshine.gui")
+    module.launch = launch
+    return module
 
 
 class MainTests(unittest.TestCase):
@@ -86,18 +92,20 @@ class MainTests(unittest.TestCase):
                 self.assertEqual(error_output.getvalue(), f"Rainshine: {error}\n")
 
     def test_gui_launch_success_and_readable_startup_failures(self):
-        with patch("rainshine.gui.launch") as launch:
+        launch = Mock()
+        with patch.dict(sys.modules, {"rainshine.gui": gui_module(launch)}):
             self.assertEqual(main([]), 0)
         launch.assert_called_once_with()
 
         error_output = io.StringIO()
-        with patch("rainshine.gui.launch", side_effect=ImportError("tkinter")), redirect_stderr(error_output):
+        with patch.dict(sys.modules, {"rainshine.gui": None}), redirect_stderr(error_output):
             self.assertEqual(main([]), 1)
         self.assertIn("Rainshine requires Tkinter", error_output.getvalue())
 
         tcl_error = type("TclError", (Exception,), {})("no display")
+        launch = Mock(side_effect=tcl_error)
         error_output = io.StringIO()
-        with patch("rainshine.gui.launch", side_effect=tcl_error), redirect_stderr(error_output):
+        with patch.dict(sys.modules, {"rainshine.gui": gui_module(launch)}), redirect_stderr(error_output):
             self.assertEqual(main([]), 1)
         self.assertEqual(
             error_output.getvalue(),
@@ -106,7 +114,8 @@ class MainTests(unittest.TestCase):
 
     def test_unexpected_gui_failure_is_raised(self):
         failure = RuntimeError("Unexpected GUI failure")
-        with patch("rainshine.gui.launch", side_effect=failure):
+        launch = Mock(side_effect=failure)
+        with patch.dict(sys.modules, {"rainshine.gui": gui_module(launch)}):
             with self.assertRaises(RuntimeError) as raised:
                 main([])
         self.assertIs(raised.exception, failure)
