@@ -8,14 +8,14 @@ plot, and the actual observations behind the display.
 
 ## Install and run
 
-Python **3.11 or newer** is required. Tkinter normally ships with the Windows
+Python **3.15 or newer** is required. Tkinter normally ships with the Windows
 and macOS installers from python.org. On Debian/Ubuntu, install `python3-tk`.
 
-From a checkout of this repository, on Windows with Python 3.14:
+From a checkout of this repository, on Windows with Python 3.15:
 
 ```powershell
-py -3.14 -m pip install -e .
-py -3.14 -m rainshine
+py -3.15 -m pip install -e .
+py -3.15 -m rainshine
 ```
 
 On macOS or Linux:
