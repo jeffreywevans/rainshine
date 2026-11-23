@@ -8,20 +8,23 @@ plot, and the actual observations behind the display.
 
 ## Install and run
 
-Python **3.11 or newer** is required. Tkinter normally ships with the Windows
-and macOS installers from python.org. On Debian/Ubuntu, install `python3-tk`.
+Python **3.15.2 or newer** is required. Tkinter normally ships with the Windows
+and macOS installers from python.org. On Linux, install Tkinter for the Python
+interpreter you use. The Debian/Ubuntu `python3-tk` package supplies it for the
+distribution's default Python.
 
-From a checkout of this repository, on Windows with Python 3.14:
+From a checkout of this repository, on Windows with Python 3.15.2 or a later
+3.15 patch release:
 
 ```powershell
-py -3.14 -m pip install -e .
-py -3.14 -m rainshine
+py -3.15 -m pip install -e .
+py -3.15 -m rainshine
 ```
 
-On macOS or Linux:
+On macOS or Linux with Python 3.15.2 or a later 3.15 patch release:
 
 ```sh
-python3 -m venv .venv
+python3.15 -m venv .venv
 .venv/bin/python -m pip install -e .
 .venv/bin/python -m rainshine
 ```
@@ -110,6 +113,7 @@ data = report.to_dict()
 
 The application uses the Python standard library. Windows installs the pinned
 `tzdata` dependency for IANA timezones. Build requirements are also pinned.
+Run the commands below with Python 3.15.2 or newer.
 
 ```sh
 python -m pip install -e .
