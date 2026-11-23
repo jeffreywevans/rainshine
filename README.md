@@ -4,24 +4,26 @@ A small Python desktop app for **the weather as recorded**. Choose a date and
 one of the 269 documented locations to see NOAA station records, a temperature
 plot, and the actual observations behind the display.
 
-![Rainshine showing recorded weather for Dayton, Ohio](docs/screenshot.png)
+![Rainshine showing recorded weather for Dayton, Ohio](https://raw.githubusercontent.com/jeffreywevans/rainshine/main/docs/screenshot.png)
 
 ## Install and run
 
-Python **3.15 or newer** is required. Tkinter normally ships with the Windows
-and macOS installers from python.org. On Debian/Ubuntu, install `python3-tk`.
+Python **3.15.2 or newer** is required. Tkinter normally ships with the Windows
+and macOS installers from python.org. On Linux, install Tkinter for the Python
+interpreter you use. The Debian/Ubuntu `python3-tk` package supplies it for the
+distribution's default Python.
 
-From a checkout of this repository, on Windows with Python 3.15:
+From a checkout of this repository on Windows with Python 3.15.2 or newer:
 
 ```powershell
-py -3.15 -m pip install -e .
-py -3.15 -m rainshine
+py -3 -m pip install -e .
+py -3 -m rainshine
 ```
 
-On macOS or Linux with Python 3.15.2 or a later 3.15 patch release:
+On macOS or Linux with Python 3.15.2 or newer:
 
 ```sh
-python3.15 -m venv .venv
+python3 -m venv .venv
 .venv/bin/python -m pip install -e .
 .venv/bin/python -m rainshine
 ```
@@ -85,7 +87,7 @@ date, regardless of the venue's opening year.
 NOAA data are retrieved when requested, not bundled with the application.
 Inventories are hints; the actual day must contain usable observations. Dataset
 availability and station histories vary. For details and attribution, see
-[DATA_SOURCES.md](DATA_SOURCES.md).
+[DATA_SOURCES.md](https://github.com/jeffreywevans/rainshine/blob/main/DATA_SOURCES.md).
 
 ## Headless access
 
@@ -137,4 +139,4 @@ On headless Linux, prefix the coverage test command with `xvfb-run -a` to includ
 GUI tests. The SonarQube workflow does this before importing `coverage.xml`.
 Generated coverage files are ignored by Git.
 
-Licensed under the existing [MIT license](LICENSE).
+Licensed under the existing [MIT license](https://github.com/jeffreywevans/rainshine/blob/main/LICENSE).
