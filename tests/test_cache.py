@@ -109,11 +109,15 @@ class CacheTests(unittest.TestCase):
             cache.fetch(URL, signature=b"STATION|")
 
     def test_http_404_is_missing_data(self):
+        body = io.BytesIO(b"Not found")
+
         def opener(request, timeout):
-            raise urllib.error.HTTPError(request.full_url, 404, "Missing", {}, None)
+            raise urllib.error.HTTPError(request.full_url, 404, "Missing", {}, body)
+
         cache = ArchiveCache(self.path, opener=opener)
         with self.assertRaises(NotFound):
             cache.fetch(URL, signature=b"STATION|")
+        self.assertTrue(body.closed)
 
     def test_untrusted_download_urls_are_rejected(self):
         cache = ArchiveCache(self.path)

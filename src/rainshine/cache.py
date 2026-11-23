@@ -62,6 +62,7 @@ class ArchiveCache:
         except Cancelled:
             raise
         except urllib.error.HTTPError as exc:
+            exc.close()
             if old:
                 return CachedFile(old.path, old.url, old.retrieved_at, True, True)
             if exc.code == 404:

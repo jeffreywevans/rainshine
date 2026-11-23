@@ -37,7 +37,9 @@ def main(argv: list[str] | None = None) -> int:
         from .gui import launch
         launch()
     except ImportError as exc:
-        print("Rainshine requires Tkinter. On Debian/Ubuntu, install python3-tk; on Windows, enable Tcl/Tk in Python's installer.", file=sys.stderr)
+        print("Rainshine requires Tkinter for the Python interpreter in use. "
+              "On Debian/Ubuntu, python3-tk supports the distribution's default Python. "
+              "On Windows, enable Tcl/Tk in Python's installer.", file=sys.stderr)
         return 1
     except Exception as exc:
         if exc.__class__.__name__ == "TclError":

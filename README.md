@@ -18,10 +18,10 @@ py -3.15 -m pip install -e .
 py -3.15 -m rainshine
 ```
 
-On macOS or Linux:
+On macOS or Linux with Python 3.15.2 or a later 3.15 patch release:
 
 ```sh
-python3 -m venv .venv
+python3.15 -m venv .venv
 .venv/bin/python -m pip install -e .
 .venv/bin/python -m rainshine
 ```
@@ -110,6 +110,7 @@ data = report.to_dict()
 
 The application uses the Python standard library. Windows installs the pinned
 `tzdata` dependency for IANA timezones. Build requirements are also pinned.
+Run the commands below with Python 3.15.2 or newer.
 
 ```sh
 python -m pip install -e .
