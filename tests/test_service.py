@@ -1,15 +1,19 @@
 import tempfile
 import unittest
 from dataclasses import replace
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from threading import Event
 from unittest.mock import patch
+from zoneinfo import ZoneInfoNotFoundError
 
 from helpers import DAILY, DAY, HOURLY, daily_line, hourly_text, write
 from rainshine.cache import CachedFile
 from rainshine.catalog import Catalog
-from rainshine.models import Cancelled, Location, NotFound, Observation, Reading, WeatherError
+from rainshine.models import (
+    Cancelled, DailyRecord, DayReport, HourlyRecord, Location, NotFound,
+    Observation, Reading, WeatherError, utc_window,
+)
 from rainshine.noaa import station_url
 from rainshine.service import WeatherService
 
@@ -57,6 +61,23 @@ class ServiceTests(unittest.TestCase):
         report = WeatherService(FakeCatalog(site), FakeCache({}), clock).fetch("Example", date(2026, 10, 21))
         self.assertNotEqual(report.status, "future")
 
+    def test_missing_timezone_data_is_a_readable_weather_error(self):
+        cache = FakeCache({})
+        missing = ZoneInfoNotFoundError(self.site.timezone)
+        with patch("rainshine.service.ZoneInfo", side_effect=missing):
+            with self.assertRaisesRegex(WeatherError, "Timezone data is missing") as raised:
+                WeatherService(FakeCatalog(self.site), cache, self.clock).fetch("Example", DAY)
+        self.assertIs(raised.exception.__cause__, missing)
+        self.assertEqual(cache.calls, [])
+
+    def test_cancellation_before_archive_selection_avoids_network_access(self):
+        cache = FakeCache({})
+        cancel = Event()
+        cancel.set()
+        with self.assertRaisesRegex(Cancelled, "Lookup cancelled"):
+            WeatherService(FakeCatalog(self.site), cache, self.clock).fetch("Example", DAY, cancel=cancel)
+        self.assertEqual(cache.calls, [])
+
     def test_missing_record_is_not_zero_weather(self):
         report = WeatherService(FakeCatalog(self.site), FakeCache({}), self.clock).fetch("Example", DAY)
         self.assertEqual(report.status, "unavailable")
@@ -93,6 +114,61 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(report.daily.station.id, farther.id)
         self.assertEqual(set(report.daily.readings), {"TMAX", "TMIN", "PRCP"})
 
+    def test_more_complete_daily_record_survives_a_worse_later_candidate(self):
+        farther = replace(DAILY, id="USC00000002", distance_km=8)
+        site = replace(self.site, daily=(DAILY, farther))
+        near = write(self.path / "near", daily_line("TMAX", 20) + daily_line("TMIN", -30))
+        far = write(self.path / "far", daily_line("PRCP", 13, station=farther))
+        cache = FakeCache({station_url(DAILY): near, station_url(farther): far})
+        report = WeatherService(FakeCatalog(site), cache, self.clock).fetch("Example", DAY)
+        self.assertEqual(report.daily.station.id, DAILY.id)
+        self.assertEqual(set(report.daily.readings), {"TMAX", "TMIN"})
+        self.assertEqual(cache.calls[:2], [station_url(DAILY), station_url(farther)])
+
+    def test_daily_archive_without_target_date_values_is_ignored(self):
+        empty = write(self.path / "daily", "")
+        cache = FakeCache({station_url(DAILY): empty})
+        report = WeatherService(FakeCatalog(self.site), cache, self.clock).fetch("Example", DAY)
+        self.assertIsNone(report.daily)
+        self.assertEqual(report.status, "unavailable")
+
+    def test_daily_archive_failure_sets_error_status_when_nothing_is_available(self):
+        cache = FakeCache({})
+
+        def fail(url, **kwargs):
+            raise WeatherError("Archive unavailable")
+
+        cache.fetch = fail
+        report = WeatherService(FakeCatalog(self.site), cache, self.clock).fetch("Example", DAY)
+        self.assertEqual(report.status, "error")
+        self.assertEqual(report.notes[0], "Archive unavailable")
+
+    def test_daily_notes_explain_rejections_flags_and_alternative_station(self):
+        alternative = replace(DAILY, id="USC00000002", distance_km=8)
+        site = replace(self.site, daily=(DAILY, alternative))
+        daily = DailyRecord(
+            alternative,
+            DAY,
+            {
+                "TMAX": Reading(2, measurement_flag="H"),
+                "TMIN": Reading(-3),
+                "PRCP": Reading(0, measurement_flag="H"),
+            },
+            rejected_values=2,
+        )
+        report = DayReport(site, DAY, "partial", daily=daily)
+        WeatherService._add_daily_notes(report)
+        notes = "\n".join(report.notes)
+        self.assertIn("2 daily value(s)", notes)
+        self.assertIn("reported precipitation", notes)
+        self.assertIn("derived from hourly temperatures", notes)
+        self.assertIn("documented alternative", notes)
+
+        daily.readings["PRCP"] = Reading(1, measurement_flag="A")
+        report.notes.clear()
+        WeatherService._add_daily_notes(report)
+        self.assertTrue(any("fewer than 24 hours" in note for note in report.notes))
+
     def test_hourly_missing_year_boundary_can_still_return_partial_observations(self):
         site = replace(self.site, timezone="Australia/Sydney")
         before = "1988-12-31T14:00:00"
@@ -100,6 +176,37 @@ class ServiceTests(unittest.TestCase):
         report = WeatherService(FakeCatalog(site), FakeCache({station_url(HOURLY, 1988): hourly}), self.clock).fetch("Example", date(1989, 1, 1))
         self.assertEqual(len(report.hourly.observations), 1)
         self.assertEqual(report.status, "partial")
+
+    def test_hourly_fallback_identifies_the_alternative_station(self):
+        farther = replace(HOURLY, id="USW00000002", name="Farther hourly", distance_km=8)
+        site = replace(self.site, hourly=(HOURLY, farther))
+        hourly = write(self.path / "hourly", hourly_text([{
+            "STATION": farther.id,
+            "temperature": "1.4",
+        }]))
+        cache = FakeCache({station_url(farther, 2010): hourly})
+        report = WeatherService(FakeCatalog(site), cache, self.clock).fetch("Example", DAY)
+        self.assertEqual(report.hourly.station.id, farther.id)
+        self.assertTrue(any("documented alternative" in note for note in report.notes))
+
+    def test_hourly_notes_handle_no_record_and_a_complete_local_day(self):
+        start, end = utc_window(DAY, self.site.timezone)
+        missing = DayReport(self.site, DAY, "unavailable")
+        WeatherService._add_hourly_notes(missing, start, end)
+        self.assertEqual(missing.notes, [])
+
+        observations = [
+            Observation(start + timedelta(hours=hour), {"temperature": Reading(hour)})
+            for hour in range(24)
+        ]
+        complete = DayReport(
+            self.site,
+            DAY,
+            "partial",
+            hourly=HourlyRecord(HOURLY, observations),
+        )
+        WeatherService._add_hourly_notes(complete, start, end)
+        self.assertFalse(any("Gaps were left empty" in note for note in complete.notes))
 
     def test_cancellation_during_either_archive_lookup_propagates(self):
         for dataset in ("ghcnd", "ghcnh"):
@@ -139,17 +246,33 @@ class ServiceTests(unittest.TestCase):
         observations = [
             Observation(instant, {"temperature": Reading(1)}),
             Observation(instant, {"temperature": Reading(2), "wind_speed": Reading(3)}, "OVC"),
+            Observation(instant, {"visibility": Reading(10)}, "CLR"),
         ]
         cache = FakeCache({station_url(HOURLY, 2010): self.path / "hourly"})
         with patch("rainshine.service.read_hourly", return_value=(observations, 2, 2)):
             report = WeatherService(FakeCatalog(self.site), cache, self.clock).fetch("Example", DAY)
         self.assertEqual(len(report.hourly.observations), 1)
         merged = report.hourly.observations[0]
-        self.assertEqual(merged.readings, {"temperature": Reading(1), "wind_speed": Reading(3)})
+        self.assertEqual(merged.readings, {
+            "temperature": Reading(1),
+            "wind_speed": Reading(3),
+            "visibility": Reading(10),
+        })
         self.assertEqual(merged.sky, "OVC")
         self.assertEqual(report.hourly.rejected_values, 2)
         self.assertEqual(report.hourly.raw_report_count, 2)
         self.assertTrue(any("2 suspect" in note for note in report.notes))
+
+    def test_stale_daily_and_hourly_records_are_disclosed(self):
+        records = (
+            {"daily": DailyRecord(DAILY, DAY, {"TMAX": Reading(2)}, stale=True)},
+            {"hourly": HourlyRecord(HOURLY, [], stale=True)},
+        )
+        for record in records:
+            with self.subTest(record=next(iter(record))):
+                report = DayReport(self.site, DAY, "partial", **record)
+                WeatherService._add_report_notes(report, [], DAY + timedelta(days=1))
+                self.assertTrue(any("previously downloaded observations" in note for note in report.notes))
 
 
 class PackagedCatalogTests(unittest.TestCase):
