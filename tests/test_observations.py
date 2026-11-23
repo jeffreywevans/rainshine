@@ -1,13 +1,14 @@
 import json
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from threading import Event
 
 from helpers import DAILY, DAY, HOURLY, daily_line, hourly_text, write
 from rainshine.models import Cancelled, DayReport, Location, Reading, WeatherError, MAX_DATE, MIN_DATE, days_in_month, utc_window, validate_date
-from rainshine.noaa import accepted_hourly_quality, read_daily, read_hourly, reported_sky
+from rainshine.noaa import accepted_hourly_quality, read_daily, read_hourly, reported_sky, station_url
 from rainshine.presentation import amount, temperature
 
 
@@ -83,6 +84,14 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(set(record.readings), {"TMAX"})
         self.assertEqual(record.rejected_values, 2)
 
+    def test_daily_parser_skips_other_dates_and_unknown_elements(self):
+        other_month = daily_line("TMAX", 200, day=date(2010, 3, 6))
+        unknown = daily_line("XXXX", 999)
+        valid = daily_line("TMAX", 100)
+        write(self.path, other_month + unknown + valid)
+        record = read_daily(self.path, DAILY, DAY)
+        self.assertEqual(record.readings, {"TMAX": Reading(10, source_flag="7")})
+
     def test_malformed_daily_records_raise_clear_errors(self):
         valid = daily_line("TMAX", 100)
         offset = 21 + (DAY.day - 1) * 8
@@ -98,6 +107,24 @@ class ParserTests(unittest.TestCase):
         self.assertFalse(accepted_hourly_quality("5", "223"))
         self.assertFalse(accepted_hourly_quality("s", "343"))
         self.assertFalse(accepted_hourly_quality("2", "223"))
+        self.assertTrue(accepted_hourly_quality("9", "999"))
+        self.assertFalse(accepted_hourly_quality("2", "999"))
+
+    def test_station_urls_accept_valid_requests_and_reject_unsafe_inputs(self):
+        self.assertTrue(station_url(DAILY).endswith(f"/{DAILY.id}.dly"))
+        self.assertTrue(station_url(HOURLY, 2010).endswith(f"/GHCNh_{HOURLY.id}_2010.psv"))
+
+        invalid_station = replace(DAILY, id="../unsafe")
+        cases = (
+            (invalid_station, None, "Invalid NOAA station identifier"),
+            (HOURLY, None, "valid station-year"),
+            (HOURLY, 1799, "valid station-year"),
+            (HOURLY, 2101, "valid station-year"),
+        )
+        for station, year, message in cases:
+            with self.subTest(station=station.id, year=year):
+                with self.assertRaisesRegex(ValueError, message):
+                    station_url(station, year)
 
     def test_hourly_interval_has_inclusive_start_exclusive_end(self):
         start, end = utc_window(DAY, "America/New_York")
@@ -165,11 +192,31 @@ class ParserTests(unittest.TestCase):
         self.assertEqual([o.time for o in observations], [datetime(2010, 2, 6, 12, tzinfo=timezone.utc)] * 3)
         self.assertEqual((bad, count), (0, 3))
 
+    def test_malformed_hourly_archives_raise_clear_errors(self):
+        start, end = utc_window(DAY, "America/New_York")
+        cases = (
+            ("", "columns were not recognized"),
+            ("DATE|temperature\n2010-02-06T12:00:00|1\n", "columns were not recognized"),
+            (hourly_text([{"DATE": "not-a-timestamp", "temperature": "1"}]), "invalid observation timestamp"),
+            (hourly_text([{"STATION": "USW00000002", "temperature": "1"}]), "different station identifier"),
+        )
+        for content, message in cases:
+            with self.subTest(message=message, content=content[:20]):
+                write(self.path, content)
+                with self.assertRaisesRegex(WeatherError, message):
+                    read_hourly(self.path, HOURLY, start, end)
+
     def test_parser_cancellation(self):
         write(self.path, daily_line("TMAX", 100))
-        event = Event(); event.set()
+        event = Event()
+        event.set()
         with self.assertRaises(Cancelled):
             read_daily(self.path, DAILY, DAY, event)
+
+        start, end = utc_window(DAY, "America/New_York")
+        write(self.path, hourly_text([{"temperature": "1"}]))
+        with self.assertRaises(Cancelled):
+            read_hourly(self.path, HOURLY, start, end, event)
 
     def test_zero_celsius_conversion(self):
         self.assertEqual(temperature(0), "32.0°F")
