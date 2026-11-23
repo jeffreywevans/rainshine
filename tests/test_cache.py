@@ -1,12 +1,16 @@
 import io
 import json
+import sys
 import tempfile
 import unittest
 import urllib.error
 from pathlib import Path
 from threading import Event
+from types import SimpleNamespace
+from unittest.mock import patch
 
-from rainshine.cache import ArchiveCache
+from rainshine import cache as cache_module
+from rainshine.cache import ArchiveCache, CachedFile, user_cache_dir
 from rainshine.models import Cancelled, NotFound, WeatherError
 
 URL = "https://www.ncei.noaa.gov/example.psv"
@@ -26,6 +30,36 @@ class CacheTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def test_windows_cache_directory(self):
+        local = self.path / "Local"
+        for environ, expected in (
+            ({"LOCALAPPDATA": str(local)}, local / "Rainshine"),
+            ({}, self.path / "AppData/Local/Rainshine"),
+        ):
+            with self.subTest(environ=environ):
+                with patch.object(cache_module, "os", SimpleNamespace(name="nt", environ=environ)):
+                    with patch.object(Path, "home", return_value=self.path):
+                        self.assertEqual(user_cache_dir(), expected)
+
+    def test_macos_cache_directory(self):
+        with patch.object(cache_module, "os", SimpleNamespace(name="posix")):
+            with patch.object(sys, "platform", "darwin"), patch.object(Path, "home", return_value=self.path):
+                self.assertEqual(user_cache_dir(), self.path / "Library/Caches/Rainshine")
+
+    def test_linux_cache_directory(self):
+        xdg_cache = self.path / "xdg-cache"
+        for environ, expected in (
+            ({"XDG_CACHE_HOME": str(xdg_cache)}, xdg_cache / "rainshine"),
+            ({}, self.path / ".cache/rainshine"),
+        ):
+            with self.subTest(environ=environ):
+                with (
+                    patch.object(cache_module, "os", SimpleNamespace(name="posix", environ=environ)),
+                    patch.object(sys, "platform", "linux"),
+                    patch.object(Path, "home", return_value=self.path),
+                ):
+                    self.assertEqual(user_cache_dir(), expected)
+
     def test_download_is_cached_without_another_network_request(self):
         calls = []
         def opener(request, timeout):
@@ -41,11 +75,27 @@ class CacheTests(unittest.TestCase):
     def test_expired_saved_observations_are_labelled_during_outage(self):
         cache = ArchiveCache(self.path, opener=lambda request, timeout: Response(b"STATION|DATE\n"))
         saved = cache.fetch(URL, signature=b"STATION|")
-        cache.opener = lambda request, timeout: (_ for _ in ()).throw(urllib.error.URLError("offline"))
-        stale = cache.fetch(URL, signature=b"STATION|", max_age=-1)
-        self.assertTrue(stale.stale)
-        self.assertTrue(stale.from_cache)
-        self.assertEqual(stale.path.read_bytes(), saved.path.read_bytes())
+        for error in (
+            urllib.error.URLError("offline"),
+            urllib.error.HTTPError(URL, 503, "Unavailable", {}, None),
+        ):
+            with self.subTest(error=error), patch.object(cache, "opener", side_effect=error):
+                stale = cache.fetch(URL, signature=b"STATION|", max_age=-1)
+                self.assertEqual(stale, CachedFile(saved.path, URL, saved.retrieved_at, True, True))
+                self.assertEqual(stale.path.read_bytes(), b"STATION|DATE\n")
+
+    def test_download_failure_without_cached_archive(self):
+        for error, message in (
+            (urllib.error.HTTPError(URL, 503, "Unavailable", {}, None), "NOAA returned HTTP 503"),
+            (urllib.error.URLError("offline"), "Could not reach NOAA"),
+        ):
+            with self.subTest(error=error):
+                cache = ArchiveCache(self.path)
+                with patch.object(cache, "opener", side_effect=error):
+                    with self.assertRaisesRegex(WeatherError, message) as raised:
+                        cache.fetch(URL, signature=b"STATION|")
+                self.assertIs(raised.exception.__cause__, error)
+                self.assertEqual(list(self.path.iterdir()), [])
 
     def test_html_error_is_not_saved_as_weather(self):
         cache = ArchiveCache(self.path, opener=lambda request, timeout: Response(b"<!doctype html>error"))
@@ -90,6 +140,12 @@ class CacheTests(unittest.TestCase):
         response.headers["Content-Length"] = "100"
         cache = ArchiveCache(self.path, opener=lambda request, timeout: response)
         with self.assertRaisesRegex(WeatherError, "incomplete"):
+            cache.fetch(URL, signature=b"STATION|")
+        self.assertEqual(list(self.path.iterdir()), [])
+
+    def test_empty_download_removes_temporary_file(self):
+        cache = ArchiveCache(self.path, opener=lambda request, timeout: Response(b""))
+        with self.assertRaisesRegex(WeatherError, "NOAA returned an empty archive file"):
             cache.fetch(URL, signature=b"STATION|")
         self.assertEqual(list(self.path.iterdir()), [])
 
