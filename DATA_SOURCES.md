@@ -37,8 +37,9 @@ fields were compacted for the application. Sources for that crosswalk include:
 - [OurAirports](https://ourairports.com/data/), airport metadata used in the
   original crosswalk. OurAirports releases its data into the public domain.
 
-The source catalog contains 238 locations in the United States, Canada, and
-Australia. Its station selection focuses on documented airport and urban
+The packaged catalog contains 269 locations in the United States, Canada, and
+Australia, including 238 settings retained from the source crosswalk. Its
+station selection focuses on documented airport and urban
 subdaily sites plus nearby daily stations with temperature and precipitation
 inventories. It is not a live worldwide station directory. Archive inventories
 are advisory and may need refreshing as source histories and holdings change.

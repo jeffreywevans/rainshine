@@ -1,20 +1,17 @@
 # Rainshine
 
 A small Python desktop app for **the weather as recorded**. Choose a date and
-one of the 238 documented locations to see NOAA station records, a temperature
+one of the 269 documented locations to see NOAA station records, a temperature
 plot, and the actual observations behind the display.
 
 ![Rainshine showing recorded weather for Dayton, Ohio](docs/screenshot.png)
 
 ## Install and run
 
-Python **3.15.2 or newer** is required. Tkinter normally ships with the Windows
-and macOS installers from python.org. On Linux, install Tkinter for the Python
-interpreter you use. The Debian/Ubuntu `python3-tk` package supplies it for the
-distribution's default Python.
+Python **3.15 or newer** is required. Tkinter normally ships with the Windows
+and macOS installers from python.org. On Debian/Ubuntu, install `python3-tk`.
 
-From a checkout of this repository, on Windows with Python 3.15.2 or a later
-3.15 patch release:
+From a checkout of this repository, on Windows with Python 3.15:
 
 ```powershell
 py -3.15 -m pip install -e .
@@ -79,7 +76,7 @@ NOAA cannot be refreshed.
 ## Locations and source data
 
 The packaged catalog is derived from the previously researched Telegraphy
-location/station lookup. It includes all 238 settings, candidate NOAA stations,
+location/station lookup. It includes all 269 settings, candidate NOAA stations,
 coordinates, timezones, and inventory intervals. Venue coordinates and
 distances are approximate. This is a documented candidate set, rather than an
 exhaustive search of every sensor. Sites remain selectable for every supported

@@ -36,7 +36,7 @@ class GuiTests(unittest.TestCase):
         self.assertEqual(len(values), 1)
         self.assertIn("Nutter Center", values[0])
         self.app._site_selected()
-        self.assertEqual(len(self.app.site_box.cget("values")), 238)
+        self.assertEqual(len(self.app.site_box.cget("values")), len(self.app.service.catalog.names))
 
     def test_future_lookup_completes_in_background_without_fake_weather(self):
         self.app.year.set("2032"); self.app.month.set("December"); self.app.day.set("31")

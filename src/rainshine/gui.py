@@ -41,6 +41,7 @@ class RainshineApp:
         self._cancel = threading.Event()
         self._request = 0
         self._closing = False
+        self._poll_after: str | None = None
         self.root.title(f"Rainshine {__version__} · Recorded weather")
         screen_height = root.winfo_screenheight()
         self.root.geometry(f"1100x{max(740, min(920, screen_height - 80))}")
@@ -79,7 +80,7 @@ class RainshineApp:
         root.bind("<Button-4>", self._scroll_overview, add="+")
         root.bind("<Button-5>", self._scroll_overview, add="+")
         self._render_empty("A day in the weather archive", "Choose any date from January 1, 1989 through December 31, 2032.")
-        root.after(80, self._poll)
+        self._poll_after = root.after(80, self._poll)
 
     @property
     def imperial(self) -> bool:
@@ -323,6 +324,7 @@ class RainshineApp:
         self.status.set("Lookup cancelled.")
 
     def _poll(self):
+        self._poll_after = None
         if self._closing:
             return
         try:
@@ -344,7 +346,7 @@ class RainshineApp:
                     self.cancel()
         except queue.Empty:
             pass
-        self.root.after(80, self._poll)
+        self._poll_after = self.root.after(80, self._poll)
 
     def _set_sources(self, text: str):
         self.source_text.configure(state="normal")
@@ -502,6 +504,9 @@ class RainshineApp:
     def close(self):
         self._closing = True
         self._cancel.set()
+        if self._poll_after is not None:
+            self.root.after_cancel(self._poll_after)
+            self._poll_after = None
         self.root.destroy()
 
 
