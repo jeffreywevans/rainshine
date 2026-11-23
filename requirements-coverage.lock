@@ -1,4 +1,4 @@
-# Pure Python coverage wheel; hash published by PyPI for coverage 7.10.7.
+# Pure Python coverage wheel; hash published by PyPI for coverage 7.17.5.
 -r requirements-ci.lock
-coverage==7.10.7 \
-    --hash=sha256:f7941f6f2fe6dd6807a1208737b8a0cbcf1cc6d7b07d24998ad2d63590868260
+coverage==7.17.5 \
+    --hash=sha256:6365cc9f34508faeaaf59ff82b45f6bbda0c823c731039edabc2bd8e774879a7
