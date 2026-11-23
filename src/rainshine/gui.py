@@ -286,20 +286,32 @@ class RainshineApp:
         self._render_empty("Looking through the archive…", f"{site} · {day.isoformat()}")
         self._set_busy(True)
         self.status.set("Contacting NOAA… The first lookup downloads station records; later lookups reuse them.")
-        cancel = self._cancel
+        worker = threading.Thread(
+            target=self._fetch_weather,
+            args=(request, site, day, self._cancel),
+            daemon=True,
+            name="rainshine-weather",
+        )
+        worker.start()
 
-        def worker():
-            try:
-                report = self.service.fetch(site, day, cancel=cancel,
-                                            progress=lambda message: self._queue.put((request, "progress", message)))
-                self._queue.put((request, "result", report))
-            except Cancelled:
-                self._queue.put((request, "cancelled", None))
-            except Exception as exc:
-                logging.getLogger(__name__).exception("Weather lookup failed")
-                message = str(exc) if isinstance(exc, WeatherError) else "The archive could not be read. Please try another date or site."
-                self._queue.put((request, "error", message))
-        threading.Thread(target=worker, daemon=True, name="rainshine-weather").start()
+    def _fetch_weather(self, request: int, site: str, day: date, cancel: threading.Event) -> None:
+        try:
+            report = self.service.fetch(
+                site,
+                day,
+                cancel=cancel,
+                progress=lambda message: self._queue.put((request, "progress", message)),
+            )
+            self._queue.put((request, "result", report))
+        except Cancelled:
+            self._queue.put((request, "cancelled", None))
+        except Exception as exc:
+            logging.getLogger(__name__).exception("Weather lookup failed")
+            if isinstance(exc, WeatherError):
+                message = str(exc)
+            else:
+                message = "The archive could not be read. Please try another date or site."
+            self._queue.put((request, "error", message))
 
     def _set_busy(self, busy: bool):
         for widget in (self.month_box, self.day_box, self.year_box):
